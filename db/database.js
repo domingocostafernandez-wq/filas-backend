@@ -4,8 +4,8 @@ const { v4: uuidv4 } = require('uuid');
 const branches   = new Map();
 const tickets    = new Map();
 const queueState = new Map();
-const callTimes  = new Map(); // ticketId -> timestamp cuando fue llamado (para calcular promedio)
-const avgTimes   = new Map(); // branchId+service -> promedio en segundos
+const callTimes  = new Map();
+const avgTimes   = new Map();
 
 const PREFIXES = { caja: 'C', atencion: 'B', ejecutivo: 'A' };
 const PRIORITY = { A: 1, B: 2, C: 3, E: 4 };
@@ -21,22 +21,8 @@ queueState.set(1, {
   last_updated: new Date().toISOString(),
 });
 
-// Tickets de demo
-const DEMO = [
-  { service: 'caja',      category: 'E', name: 'Juan P.'   },
-  { service: 'caja',      category: 'C', name: 'María G.'  },
-  { service: 'atencion',  category: 'B', name: 'Carlos R.' },
-  { service: 'caja',      category: 'E', name: 'Ana M.'    },
-  { service: 'ejecutivo', category: 'A', name: 'Pedro L.'  },
-  { service: 'caja',      category: 'C', name: 'Sofía V.'  },
-  { service: 'atencion',  category: 'E', name: 'Luis T.'   },
-  { service: 'caja',      category: 'E', name: 'Carmen F.' },
-  { service: 'atencion',  category: 'B', name: 'Diego A.'  },
-  { service: 'caja',      category: 'C', name: 'Paula S.'  },
-];
-
-// Tickets de demo — 10 personas ya en cola
-const DEMO = [
+// 10 personas de demo en cola
+const DEMO_TICKETS = [
   { service: 'caja',      category: 'C', name: 'María G.'   },
   { service: 'caja',      category: 'E', name: 'Juan P.'    },
   { service: 'atencion',  category: 'B', name: 'Carlos R.'  },
@@ -50,11 +36,11 @@ const DEMO = [
 ];
 
 const cnt = { C: 0, B: 0, A: 0, E: 0 };
-DEMO.forEach((d, i) => {
+DEMO_TICKETS.forEach((d, i) => {
   const prefix = PREFIXES[d.service] || 'E';
   cnt[prefix]++;
   const id = uuidv4();
-  const ts = new Date(Date.now() - (DEMO.length - i) * 2000).toISOString();
+  const ts = new Date(Date.now() - (DEMO_TICKETS.length - i) * 2000).toISOString();
   tickets.set(id, {
     id,
     number:      `${prefix}-${String(cnt[prefix]).padStart(3,'0')}`,
@@ -92,7 +78,6 @@ function nextNumber(branchId, service) {
   return `${prefix}-${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3,'0')}`;
 }
 
-// Calcular promedio real de atención en minutos
 function getAvgMinutes(branchId, service) {
   const key = `${branchId}-${service}`;
   if (avgTimes.has(key)) return avgTimes.get(key);
@@ -101,12 +86,10 @@ function getAvgMinutes(branchId, service) {
   return branch[`avg_${service}`] || 4;
 }
 
-// Registrar cuando se llama un ticket (para calcular promedio)
 function recordCallTime(ticketId) {
   callTimes.set(ticketId, Date.now());
 }
 
-// Cuando se finaliza, actualizar el promedio
 function recordFinishTime(ticketId) {
   const called = callTimes.get(ticketId);
   if (!called) return;
@@ -115,14 +98,13 @@ function recordFinishTime(ticketId) {
   const durationMin = (Date.now() - called) / 60000;
   const key = `${t.branch_id}-${t.service}`;
   const current = avgTimes.get(key) || getAvgMinutes(t.branch_id, t.service);
-  // Media móvil exponencial — pondera 30% el nuevo valor
   avgTimes.set(key, Math.round((current * 0.7 + durationMin * 0.3) * 10) / 10);
   callTimes.delete(ticketId);
 }
 
 const db = {
-  getBranch:     (id)  => branches.get(id) || null,
-  getAvg:        (id)  => {
+  getBranch:  (id) => branches.get(id) || null,
+  getAvg:     (id) => {
     const b = branches.get(id);
     if (!b) return null;
     return {
@@ -133,8 +115,8 @@ const db = {
   },
   getPending,
   nextNumber,
-  getTicket:    (id)  => tickets.get(id) || null,
-  getByRut:     (rut) => [...tickets.values()]
+  getTicket:  (id)  => tickets.get(id) || null,
+  getByRut:   (rut) => [...tickets.values()]
     .find(t => t.rut === rut && ['pending','called'].includes(t.status)) || null,
 
   createTicket: (fields) => {
@@ -172,7 +154,6 @@ const db = {
     return map;
   },
 
-  // Calcular posición y tiempo estimado para un ticket específico
   getTicketStatus: (ticketId) => {
     const t = tickets.get(ticketId);
     if (!t) return null;
@@ -181,7 +162,7 @@ const db = {
     const avgMin   = getAvgMinutes(t.branch_id, t.service);
     return {
       ticket:       t,
-      position:     position >= 0 ? position : null, // null = ya fue llamado
+      position:     position >= 0 ? position : null,
       turnsBefore:  position > 0 ? position : 0,
       estMinutes:   position > 0 ? Math.round(position * avgMin) : 0,
       currentTurn:  pending[0]?.number || null,
