@@ -21,18 +21,18 @@ queueState.set(1, {
   last_updated: new Date().toISOString(),
 });
 
-// 10 personas de demo en cola
+// 10 personas de demo en cola — solo caja para demo limpia
 const DEMO_TICKETS = [
-  { service: 'caja',      category: 'C', name: 'María G.'   },
-  { service: 'caja',      category: 'E', name: 'Juan P.'    },
-  { service: 'atencion',  category: 'B', name: 'Carlos R.'  },
-  { service: 'caja',      category: 'E', name: 'Ana M.'     },
-  { service: 'ejecutivo', category: 'A', name: 'Pedro L.'   },
-  { service: 'caja',      category: 'C', name: 'Sofía V.'   },
-  { service: 'atencion',  category: 'E', name: 'Luis T.'    },
-  { service: 'caja',      category: 'E', name: 'Carmen F.'  },
-  { service: 'atencion',  category: 'B', name: 'Diego A.'   },
-  { service: 'caja',      category: 'C', name: 'Paula S.'   },
+  { service: 'caja', category: 'C', name: 'María G.'   },
+  { service: 'caja', category: 'E', name: 'Juan P.'    },
+  { service: 'caja', category: 'C', name: 'Ana M.'     },
+  { service: 'caja', category: 'E', name: 'Sofía V.'   },
+  { service: 'caja', category: 'E', name: 'Carmen F.'  },
+  { service: 'caja', category: 'C', name: 'Paula S.'   },
+  { service: 'caja', category: 'E', name: 'Roberto L.' },
+  { service: 'caja', category: 'E', name: 'Claudia R.' },
+  { service: 'caja', category: 'C', name: 'Felipe M.'  },
+  { service: 'caja', category: 'E', name: 'Valeria T.' },
 ];
 
 const cnt = { C: 0, B: 0, A: 0, E: 0 };
