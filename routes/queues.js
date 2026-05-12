@@ -36,8 +36,12 @@ router.post('/:branchId/finish', (req, res) => {
 
 router.post('/:branchId/absent', (req, res) => {
   const branchId = parseInt(req.params.branchId);
-  db.setStatus(req.body.ticketId, 'absent');
-  broadcast(branchId, { type: 'TICKET_ABSENT', ticketId: req.body.ticketId });
+  const { ticketId } = req.body;
+  db.setStatus(ticketId, 'absent');
+  broadcast(branchId, { type: 'TICKET_ABSENT', ticketId, pending: db.getPending(branchId) });
+  // Notificar al cliente directamente
+  const { sendTo } = require('../socket/events');
+  sendTo(ticketId, { type: 'TICKET_DONE', ticketId, reason: 'absent' });
   res.json({ success: true });
 });
 

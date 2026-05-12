@@ -35,23 +35,7 @@ const DEMO = [
   { service: 'caja',      category: 'C', name: 'Paula S.'  },
 ];
 
-const cnt = { C: 0, B: 0, A: 0, E: 0 };
-DEMO.forEach((d, i) => {
-  const prefix = PREFIXES[d.service] || 'E';
-  cnt[prefix]++;
-  const id = uuidv4();
-  // Crear con timestamps ligeramente distintos para mantener el orden
-  const ts = new Date(Date.now() - (DEMO.length - i) * 1000).toISOString();
-  tickets.set(id, {
-    id, number: `${prefix}-${String(cnt[prefix]).padStart(3,'0')}`,
-    prefix, branch_id: 1, service: d.service,
-    rut: null, client_name: d.name, category: d.category,
-    status: 'pending', push_token: null,
-    created_at: ts, called_at: null, finished_at: null,
-  });
-});
-
-console.log(`✓ BD en memoria · ${tickets.size} tickets de demo`);
+console.log(`✓ BD en memoria lista · cola vacía`);
 
 function getPending(branchId) {
   return [...tickets.values()]

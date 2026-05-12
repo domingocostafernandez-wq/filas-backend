@@ -76,7 +76,9 @@ function handle(ws, msg) {
     case 'MARK_ABSENT': {
       const { ticketId, branchId } = msg;
       db.setStatus(ticketId, 'absent');
-      broadcast(branchId, { type: 'TICKET_ABSENT', ticketId });
+      broadcast(branchId, { type: 'TICKET_ABSENT', ticketId, pending: db.getPending(branchId) });
+      // Notificar al cliente que fue marcado ausente
+      sendTo(ticketId, { type: 'TICKET_DONE', ticketId, reason: 'absent' });
       notifyAllPending(branchId);
       break;
     }
