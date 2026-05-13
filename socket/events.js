@@ -76,6 +76,7 @@ function handle(ws, msg) {
     case 'MARK_ABSENT': {
       const { ticketId, branchId } = msg;
       db.setStatus(ticketId, 'absent');
+      db.setQueueState(branchId, null, null, null);
       broadcast(branchId, { type: 'TICKET_ABSENT', ticketId, pending: db.getPending(branchId) });
       // Notificar al cliente que fue marcado ausente
       sendTo(ticketId, { type: 'TICKET_DONE', ticketId, reason: 'absent' });
@@ -187,6 +188,8 @@ function callNext(branchId, service, box, executiveWs) {
 
 function finishTicket(ticketId, branchId) {
   db.setStatus(ticketId, 'finished');
+  // Limpiar turno actual
+  db.setQueueState(branchId, null, null, null);
   const pending = db.getPending(branchId);
   const counts  = db.countPending(branchId);
 
