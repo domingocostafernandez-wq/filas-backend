@@ -94,6 +94,26 @@ function handle(ws, msg) {
       break;
     }
 
+    case 'CEDER_TICKET': {
+      // Ceder de uno en uno hacia atrás
+      const { ticketId, branchId } = msg;
+      startCeder(ticketId, branchId);
+      break;
+    }
+
+    case 'ACCEPT_CEDER': {
+      const { ticketId, fromTicketId, branchId } = msg;
+      finishCeder(fromTicketId, ticketId, branchId, true);
+      break;
+    }
+
+    case 'REJECT_CEDER': {
+      const { ticketId, fromTicketId, branchId } = msg;
+      // Continuar con el siguiente
+      advanceCeder(fromTicketId, branchId);
+      break;
+    }
+
     case 'REQUEST_SWAP': {
       const from = db.getTicket(msg.fromTicketId);
       const to   = db.getTicket(msg.toTicketId);
@@ -219,6 +239,118 @@ function broadcast(branchId, data) {
   rooms.get(branchId)?.forEach(ws => {
     if (ws.readyState === 1) ws.send(payload);
   });
+}
+
+// ── Ceder ticket — pregunta de uno en uno hacia atrás ─────────────────────
+
+const cederSessions = new Map(); // fromTicketId -> { candidates, currentIdx, timer, branchId }
+
+function startCeder(fromTicketId, branchId) {
+  const pending = db.getPending(branchId);
+  const fromIdx = pending.findIndex(t => t.id === fromTicketId);
+  if (fromIdx === -1) return;
+
+  // Candidatos: todos los que van DESPUÉS del que cede
+  const candidates = pending.slice(fromIdx + 1);
+  if (candidates.length === 0) {
+    sendTo(fromTicketId, { type: 'CEDER_NO_CANDIDATES' });
+    return;
+  }
+
+  cederSessions.set(fromTicketId, { candidates, currentIdx: 0, timer: null, branchId });
+  askNextCandidate(fromTicketId);
+}
+
+function askNextCandidate(fromTicketId) {
+  const session = cederSessions.get(fromTicketId);
+  if (!session) return;
+
+  const { candidates, currentIdx, branchId } = session;
+  if (currentIdx >= candidates.length) {
+    // Nadie aceptó
+    sendTo(fromTicketId, { type: 'CEDER_NADIE_ACEPTO' });
+    cederSessions.delete(fromTicketId);
+    return;
+  }
+
+  const candidate = candidates[currentIdx];
+  const fromTicket = db.getTicket(fromTicketId);
+
+  // Notificar al candidato
+  sendTo(candidate.id, {
+    type:        'CEDER_REQUEST',
+    fromTicket,
+    toTicket:    candidate,
+    expiresIn:   60,
+    position:    currentIdx + 1,
+    total:       candidates.length,
+  });
+
+  // Notificar al que cede quién está preguntando ahora
+  sendTo(fromTicketId, {
+    type:      'CEDER_ASKING',
+    candidate: { name: candidate.client_name, number: candidate.number },
+    position:  currentIdx + 1,
+    total:     candidates.length,
+    expiresIn: 60,
+  });
+
+  // Timer de 1 minuto — si no responde, avanzar al siguiente
+  if (session.timer) clearTimeout(session.timer);
+  session.timer = setTimeout(() => {
+    advanceCeder(fromTicketId, branchId);
+  }, 60000);
+}
+
+function advanceCeder(fromTicketId, branchId) {
+  const session = cederSessions.get(fromTicketId);
+  if (!session) return;
+  session.currentIdx++;
+  askNextCandidate(fromTicketId);
+}
+
+function finishCeder(fromTicketId, toTicketId, branchId, accepted) {
+  const session = cederSessions.get(fromTicketId);
+  if (session?.timer) clearTimeout(session.timer);
+  cederSessions.delete(fromTicketId);
+
+  if (!accepted) return;
+
+  const fromTicket = db.getTicket(fromTicketId);
+  const toTicket   = db.getTicket(toTicketId);
+  if (!fromTicket || !toTicket) return;
+
+  // El que recibe hereda el número del que cede
+  const cedidoNumber = fromTicket.number;
+  db.setStatus(fromTicketId, 'cancelled');
+
+  // Actualizar número del receptor
+  const t = db.getTicket(toTicketId);
+  if (t) t.number = cedidoNumber;
+
+  broadcast(branchId, {
+    type:    'CEDER_ACCEPTED',
+    fromTicketId,
+    toTicketId,
+    number:  cedidoNumber,
+    pending: db.getPending(branchId),
+  });
+
+  // Notificar al que cedió
+  sendTo(fromTicketId, {
+    type:    'CEDER_DONE',
+    toName:  toTicket.client_name,
+    number:  cedidoNumber,
+  });
+
+  // Notificar al que recibió
+  sendTo(toTicketId, {
+    type:      'CEDER_RECEIVED',
+    newNumber: cedidoNumber,
+    fromName:  fromTicket.client_name,
+  });
+
+  notifyAllPending(branchId);
 }
 
 module.exports = { setupWebSocket, broadcast, send, sendTo, clientSockets, callNext, finishTicket };
