@@ -73,8 +73,23 @@ router.get('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const ticket = db.getTicket(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+
   db.setStatus(req.params.id, 'cancelled');
-  broadcast(ticket.branch_id, { type: 'TICKET_CANCELLED', ticketId: req.params.id, pending: db.getPending(ticket.branch_id) });
+
+  // Si era el turno activo, limpiar queueState
+  const state = db.getQueueState(ticket.branch_id);
+  if (state?.current_ticket === ticket.number) {
+    db.setQueueState(ticket.branch_id, null, null, null);
+  }
+
+  const pending = db.getPending(ticket.branch_id);
+  broadcast(ticket.branch_id, {
+    type:     'TICKET_CANCELLED',
+    ticketId: req.params.id,
+    pending,
+    clearCurrent: state?.current_ticket === ticket.number,
+  });
+
   res.json({ success: true });
 });
 
